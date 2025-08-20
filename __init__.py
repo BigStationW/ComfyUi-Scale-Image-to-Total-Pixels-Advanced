@@ -9,16 +9,16 @@ import node_helpers
 
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
-    resize_methods = ["stretch", "crop", "pad"]
+    resize_modes = ["stretch", "crop", "pad"]
 
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { 
             "image": ("IMAGE",),
-            "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
             "megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.01}),
             "multiple_of": ("INT", {"default": 16, "min": 1, "max": 128, "step": 1}),
-            "method": (s.resize_methods, {"default": "crop"}),
+            "resize_mode": (s.resize_modes, {"default": "crop"}),
+            "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
         }}
 
     RETURN_TYPES = ("IMAGE", "INT", "INT")
@@ -26,7 +26,7 @@ class ImageScaleToTotalPixelsX:
     FUNCTION = "upscale"
     CATEGORY = "image/upscaling"
 
-    def upscale(self, image, upscale_method, megapixels, multiple_of, method):
+    def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode):
         _, oh, ow, _ = image.shape
         total = int(megapixels * 1024 * 1024)
         
@@ -49,7 +49,7 @@ class ImageScaleToTotalPixelsX:
         x = y = x2 = y2 = 0
         pad_left = pad_right = pad_top = pad_bottom = 0
 
-        if method == 'pad':
+        if resize_mode == 'pad':
             # Calculate scaling ratio to fit within target dimensions
             ratio = min(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
@@ -64,7 +64,7 @@ class ImageScaleToTotalPixelsX:
             width = new_width
             height = new_height
             
-        elif method == 'crop':
+        elif resize_mode == 'crop':
             # Scale to fill target dimensions, then crop excess
             ratio = max(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
@@ -99,7 +99,7 @@ class ImageScaleToTotalPixelsX:
             outputs = F.interpolate(samples, size=(height, width), mode=upscale_method)
 
         # Apply padding if needed
-        if method == 'pad':
+        if resize_mode == 'pad':
             if pad_left > 0 or pad_right > 0 or pad_top > 0 or pad_bottom > 0:
                 outputs = F.pad(outputs, (pad_left, pad_right, pad_top, pad_bottom), value=0)
 
@@ -107,7 +107,7 @@ class ImageScaleToTotalPixelsX:
         outputs = outputs.permute(0, 2, 3, 1)
 
         # Apply cropping if needed
-        if method == 'crop':
+        if resize_mode == 'crop':
             if x > 0 or y > 0 or x2 > 0 or y2 > 0:
                 outputs = outputs[:, y:y2, x:x2, :]
 

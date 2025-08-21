@@ -6,9 +6,8 @@ import math
 import comfy.utils
 import comfy.model_management
 import node_helpers
-from server import PromptServer
 
-WEB_DIRECTORY = "./js" 
+WEB_DIRECTORY = "./js"
 
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
@@ -25,35 +24,32 @@ class ImageScaleToTotalPixelsX:
                 "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
             },
             "hidden": {
+                # Kept for compatibility; not used anymore
                 "unique_id": "UNIQUE_ID",
             }
         }
 
     RETURN_TYPES = ("IMAGE", "INT", "INT")
-    RETURN_NAMES = ("image", "width", "height") 
+    RETURN_NAMES = ("image", "width", "height")
     FUNCTION = "upscale"
     CATEGORY = "image/upscaling"
 
     def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode, unique_id=None):
         _, oh, ow, _ = image.shape
-        
+
         if megapixels == 0:
-            # Skip megapixel scaling, just use original dimensions with multiple_of rounding
             target_width = ow
             target_height = oh
         else:
-            # Calculate target dimensions based on megapixels
             total = int(megapixels * 1024 * 1024)
             scale_by = math.sqrt(total / (ow * oh))
             target_width = round(ow * scale_by)
             target_height = round(oh * scale_by)
 
-        # Apply multiple_of rounding to target dimensions
         if multiple_of > 1:
             target_width = target_width - (target_width % multiple_of)
             target_height = target_height - (target_height % multiple_of)
-        
-        # Ensure minimum size
+
         target_width = max(multiple_of, target_width)
         target_height = max(multiple_of, target_height)
 
@@ -72,7 +68,7 @@ class ImageScaleToTotalPixelsX:
             pad_bottom = target_height - new_height - pad_top
             width = new_width
             height = new_height
-            
+
         elif resize_mode == 'crop':
             ratio = max(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
@@ -92,29 +88,23 @@ class ImageScaleToTotalPixelsX:
             width = new_width
             height = new_height
 
-        # Convert to tensor format for processing
         samples = image.permute(0, 3, 1, 2)
 
-        # Resize the image
         if upscale_method == "lanczos":
             outputs = comfy.utils.lanczos(samples, width, height)
         else:
             outputs = F.interpolate(samples, size=(height, width), mode=upscale_method)
 
-        # Apply padding if needed
         if resize_mode == 'pad':
             if pad_left > 0 or pad_right > 0 or pad_top > 0 or pad_bottom > 0:
                 outputs = F.pad(outputs, (pad_left, pad_right, pad_top, pad_bottom), value=0)
 
-        # Convert back to image format
         outputs = outputs.permute(0, 2, 3, 1)
 
-        # Apply cropping if needed
         if resize_mode == 'crop':
             if x > 0 or y > 0 or x2 > 0 or y2 > 0:
                 outputs = outputs[:, y:y2, x:x2, :]
 
-        # Final multiple_of adjustment if needed
         if multiple_of > 1 and (outputs.shape[2] % multiple_of != 0 or outputs.shape[1] % multiple_of != 0):
             final_width = outputs.shape[2]
             final_height = outputs.shape[1]
@@ -123,22 +113,19 @@ class ImageScaleToTotalPixelsX:
             x2 = final_width - ((final_width % multiple_of) - x)
             y2 = final_height - ((final_height % multiple_of) - y)
             outputs = outputs[:, y:y2, x:x2, :]
-        
+
         outputs = torch.clamp(outputs, 0, 1)
-        
-        # Get final dimensions
+
         final_width = outputs.shape[2]
         final_height = outputs.shape[1]
-        final_megapixels = (final_width * final_height) / (1024 * 1024)
-        
-        # Send progress text to display resolution on the node
-        if unique_id:
-            PromptServer.instance.send_progress_text(
-                f"{final_width}x{final_height}", 
-                unique_id
-            )
-        
-        return (outputs, final_width, final_height)
+
+        # Prepare UI text (array form, like DisplayAny)
+        ui_text = [f"{final_width}x{final_height}"]
+
+        return {
+            "ui": {"text": ui_text},
+            "result": (outputs, final_width, final_height),
+        }
 
 NODE_CLASS_MAPPINGS = { 
     "ImageScaleToTotalPixelsX": ImageScaleToTotalPixelsX

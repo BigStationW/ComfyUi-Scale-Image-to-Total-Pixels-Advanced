@@ -15,7 +15,7 @@ class ImageScaleToTotalPixelsX:
     def INPUT_TYPES(s):
         return {"required": { 
             "image": ("IMAGE",),
-            "megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.01}),
+            "megapixels": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 16.0, "step": 0.01}),
             "multiple_of": ("INT", {"default": 16, "min": 1, "max": 128, "step": 1}),
             "resize_mode": (s.resize_modes, {"default": "crop"}),
             "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
@@ -28,12 +28,17 @@ class ImageScaleToTotalPixelsX:
 
     def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode):
         _, oh, ow, _ = image.shape
-        total = int(megapixels * 1024 * 1024)
         
-        # Calculate target dimensions based on megapixels
-        scale_by = math.sqrt(total / (ow * oh))
-        target_width = round(ow * scale_by)
-        target_height = round(oh * scale_by)
+        if megapixels == 0:
+            # Skip megapixel scaling, just use original dimensions with multiple_of rounding
+            target_width = ow
+            target_height = oh
+        else:
+            # Calculate target dimensions based on megapixels
+            total = int(megapixels * 1024 * 1024)
+            scale_by = math.sqrt(total / (ow * oh))
+            target_width = round(ow * scale_by)
+            target_height = round(oh * scale_by)
 
         # Apply multiple_of rounding to target dimensions
         if multiple_of > 1:

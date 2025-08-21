@@ -8,6 +8,8 @@ import comfy.model_management
 import node_helpers
 from server import PromptServer
 
+WEB_DIRECTORY = "./js" 
+
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
     resize_modes = ["stretch", "crop", "pad"]

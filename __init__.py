@@ -6,6 +6,7 @@ import math
 import comfy.utils
 import comfy.model_management
 import node_helpers
+from server import PromptServer
 
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
@@ -13,20 +14,25 @@ class ImageScaleToTotalPixelsX:
 
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": { 
-            "image": ("IMAGE",),
-            "megapixels": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 16.0, "step": 0.01}),
-            "multiple_of": ("INT", {"default": 16, "min": 1, "max": 128, "step": 1}),
-            "resize_mode": (s.resize_modes, {"default": "crop"}),
-            "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
-        }}
+        return {
+            "required": { 
+                "image": ("IMAGE",),
+                "megapixels": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 16.0, "step": 0.01}),
+                "multiple_of": ("INT", {"default": 16, "min": 1, "max": 128, "step": 1}),
+                "resize_mode": (s.resize_modes, {"default": "crop"}),
+                "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            }
+        }
 
     RETURN_TYPES = ("IMAGE", "INT", "INT")
     RETURN_NAMES = ("image", "width", "height") 
     FUNCTION = "upscale"
     CATEGORY = "image/upscaling"
 
-    def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode):
+    def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode, unique_id=None):
         _, oh, ow, _ = image.shape
         
         if megapixels == 0:
@@ -55,33 +61,24 @@ class ImageScaleToTotalPixelsX:
         pad_left = pad_right = pad_top = pad_bottom = 0
 
         if resize_mode == 'pad':
-            # Calculate scaling ratio to fit within target dimensions
             ratio = min(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
             new_height = round(oh * ratio)
-
-            # Calculate padding to center the image
             pad_left = (target_width - new_width) // 2
             pad_right = target_width - new_width - pad_left
             pad_top = (target_height - new_height) // 2
             pad_bottom = target_height - new_height - pad_top
-
             width = new_width
             height = new_height
             
         elif resize_mode == 'crop':
-            # Scale to fill target dimensions, then crop excess
             ratio = max(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
             new_height = round(oh * ratio)
-            
-            # Calculate crop coordinates
             x = (new_width - target_width) // 2
             y = (new_height - target_height) // 2
             x2 = x + target_width
             y2 = y + target_height
-            
-            # Adjust if coordinates go out of bounds
             if x2 > new_width:
                 x -= (x2 - new_width)
             if x < 0:
@@ -90,7 +87,6 @@ class ImageScaleToTotalPixelsX:
                 y -= (y2 - new_height)
             if y < 0:
                 y = 0
-                
             width = new_width
             height = new_height
 
@@ -128,7 +124,19 @@ class ImageScaleToTotalPixelsX:
         
         outputs = torch.clamp(outputs, 0, 1)
         
-        return (outputs, outputs.shape[2], outputs.shape[1])
+        # Get final dimensions
+        final_width = outputs.shape[2]
+        final_height = outputs.shape[1]
+        final_megapixels = (final_width * final_height) / (1024 * 1024)
+        
+        # Send progress text to display resolution on the node
+        if unique_id:
+            PromptServer.instance.send_progress_text(
+                f"{final_width}x{final_height}", 
+                unique_id
+            )
+        
+        return (outputs, final_width, final_height)
 
 NODE_CLASS_MAPPINGS = { 
     "ImageScaleToTotalPixelsX": ImageScaleToTotalPixelsX

@@ -28,7 +28,7 @@ Documentation = "https://github.com/BigStationW/ComfyUi-Scale-Image-to-Total-Pix
 "Bug Tracker" = "https://github.com/BigStationW/ComfyUi-Scale-Image-to-Total-Pixels-Advanced/issues"
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "bigstationw"
 DisplayName = "ComfyUi-Scale-Image-to-Total-Pixels-Advanced"
 Icon = ""
 includes = [] 

@@ -7,7 +7,10 @@ import comfy.utils
 import comfy.model_management
 import node_helpers
 
-WEB_DIRECTORY = "./js"
+try:
+    from server import PromptServer
+except ImportError:
+    PromptServer = None
 
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
@@ -24,7 +27,6 @@ class ImageScaleToTotalPixelsX:
                 "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
             },
             "hidden": {
-                # Kept for compatibility; not used anymore
                 "unique_id": "UNIQUE_ID",
             }
         }
@@ -119,13 +121,16 @@ class ImageScaleToTotalPixelsX:
         final_width = outputs.shape[2]
         final_height = outputs.shape[1]
 
-        # Prepare UI text (array form, like DisplayAny)
-        ui_text = [f"{final_width}x{final_height}"]
+        # Display resolution using simple text output
+        if unique_id and PromptServer is not None:
+            try:
+                # Style the parent container to center everything
+                message = f"<tr><td colspan='2' style='text-align: center;'><style>.dom-widget div {{justify-content: center !important;}}</style><b>{final_width} x {final_height}</b></td></tr>"
+                PromptServer.instance.send_progress_text(message, unique_id)
+            except:
+                pass
 
-        return {
-            "ui": {"text": ui_text},
-            "result": (outputs, final_width, final_height),
-        }
+        return (outputs, final_width, final_height)
 
 NODE_CLASS_MAPPINGS = { 
     "ImageScaleToTotalPixelsX": ImageScaleToTotalPixelsX

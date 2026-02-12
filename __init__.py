@@ -43,7 +43,7 @@ class ImageScaleToTotalPixelsX:
             target_width = ow
             target_height = oh
         else:
-            total = int(megapixels * 1024 * 1024)
+            total = int(megapixels * 1000000)
             scale_by = math.sqrt(total / (ow * oh))
             target_width = round(ow * scale_by)
             target_height = round(oh * scale_by)

@@ -12,6 +12,7 @@ try:
 except ImportError:
     PromptServer = None
 
+
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
     resize_modes = ["stretch", "crop", "pad"]
@@ -19,12 +20,26 @@ class ImageScaleToTotalPixelsX:
     @classmethod
     def INPUT_TYPES(s):
         return {
-            "required": { 
+            "required": {
                 "image": ("IMAGE",),
-                "megapixels": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 16.0, "step": 0.01}),
-                "multiple_of": ("INT", {"default": 16, "min": 1, "max": 128, "step": 1}),
+                "megapixels": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 16.0,
+                    "step": 0.01
+                }),
+                "multiple_of": ("INT", {
+                    "default": 16,
+                    "min": 1,
+                    "max": 128,
+                    "step": 1
+                }),
                 "resize_mode": (s.resize_modes, {"default": "crop"}),
                 "upscale_method": (s.upscale_methods, {"default": "lanczos"}),
+            },
+            "optional": {
+                "width": ("INT", {"forceInput": True}),
+                "height": ("INT", {"forceInput": True}),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -36,10 +51,25 @@ class ImageScaleToTotalPixelsX:
     FUNCTION = "upscale"
     CATEGORY = "image/upscaling"
 
-    def upscale(self, image, upscale_method, megapixels, multiple_of, resize_mode, unique_id=None):
+    def upscale(
+        self,
+        image,
+        upscale_method,
+        megapixels,
+        multiple_of,
+        resize_mode,
+        unique_id=None,
+        width=None,
+        height=None
+    ):
         _, oh, ow, _ = image.shape
 
-        if megapixels == 0:
+        manual_resolution = width is not None and height is not None
+
+        if manual_resolution:
+            target_width = int(width)
+            target_height = int(height)
+        elif megapixels == 0:
             target_width = ow
             target_height = oh
         else:
@@ -48,6 +78,7 @@ class ImageScaleToTotalPixelsX:
             target_width = round(ow * scale_by)
             target_height = round(oh * scale_by)
 
+        # multiple_of is always active, even when width and height are connected.
         if multiple_of > 1:
             target_width = target_width - (target_width % multiple_of)
             target_height = target_height - (target_height % multiple_of)
@@ -55,65 +86,86 @@ class ImageScaleToTotalPixelsX:
         target_width = max(multiple_of, target_width)
         target_height = max(multiple_of, target_height)
 
-        width = target_width
-        height = target_height
+        resize_width = target_width
+        resize_height = target_height
+
         x = y = x2 = y2 = 0
         pad_left = pad_right = pad_top = pad_bottom = 0
 
-        if resize_mode == 'pad':
+        if resize_mode == "pad":
             ratio = min(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
             new_height = round(oh * ratio)
+
             pad_left = (target_width - new_width) // 2
             pad_right = target_width - new_width - pad_left
             pad_top = (target_height - new_height) // 2
             pad_bottom = target_height - new_height - pad_top
-            width = new_width
-            height = new_height
 
-        elif resize_mode == 'crop':
+            resize_width = new_width
+            resize_height = new_height
+
+        elif resize_mode == "crop":
             ratio = max(target_width / ow, target_height / oh)
             new_width = round(ow * ratio)
             new_height = round(oh * ratio)
+
             x = (new_width - target_width) // 2
             y = (new_height - target_height) // 2
             x2 = x + target_width
             y2 = y + target_height
+
             if x2 > new_width:
-                x -= (x2 - new_width)
+                x -= x2 - new_width
             if x < 0:
                 x = 0
+
             if y2 > new_height:
-                y -= (y2 - new_height)
+                y -= y2 - new_height
             if y < 0:
                 y = 0
-            width = new_width
-            height = new_height
+
+            resize_width = new_width
+            resize_height = new_height
 
         samples = image.permute(0, 3, 1, 2)
 
         if upscale_method == "lanczos":
-            outputs = comfy.utils.lanczos(samples, width, height)
+            outputs = comfy.utils.lanczos(samples, resize_width, resize_height)
         else:
-            outputs = F.interpolate(samples, size=(height, width), mode=upscale_method)
+            outputs = F.interpolate(
+                samples,
+                size=(resize_height, resize_width),
+                mode=upscale_method
+            )
 
-        if resize_mode == 'pad':
+        if resize_mode == "pad":
             if pad_left > 0 or pad_right > 0 or pad_top > 0 or pad_bottom > 0:
-                outputs = F.pad(outputs, (pad_left, pad_right, pad_top, pad_bottom), value=0)
+                outputs = F.pad(
+                    outputs,
+                    (pad_left, pad_right, pad_top, pad_bottom),
+                    value=0
+                )
 
         outputs = outputs.permute(0, 2, 3, 1)
 
-        if resize_mode == 'crop':
+        if resize_mode == "crop":
             if x > 0 or y > 0 or x2 > 0 or y2 > 0:
                 outputs = outputs[:, y:y2, x:x2, :]
 
-        if multiple_of > 1 and (outputs.shape[2] % multiple_of != 0 or outputs.shape[1] % multiple_of != 0):
+        # Final safety crop to enforce multiple_of after resize/crop/pad.
+        if multiple_of > 1 and (
+            outputs.shape[2] % multiple_of != 0 or
+            outputs.shape[1] % multiple_of != 0
+        ):
             final_width = outputs.shape[2]
             final_height = outputs.shape[1]
+
             x = (final_width % multiple_of) // 2
             y = (final_height % multiple_of) // 2
             x2 = final_width - ((final_width % multiple_of) - x)
             y2 = final_height - ((final_height % multiple_of) - y)
+
             outputs = outputs[:, y:y2, x:x2, :]
 
         outputs = torch.clamp(outputs, 0, 1)
@@ -121,20 +173,27 @@ class ImageScaleToTotalPixelsX:
         final_width = outputs.shape[2]
         final_height = outputs.shape[1]
 
-        # Display resolution using simple text output
         if unique_id and PromptServer is not None:
             try:
-                # Style the parent container to center everything
-                message = f"<tr><td colspan='2' style='text-align: center;'><style>.dom-widget div {{justify-content: center !important;}}</style><b>{final_width} x {final_height}</b></td></tr>"
+                message = (
+                    "<tr>"
+                    "<td colspan='2' style='text-align: center;'>"
+                    "<style>.dom-widget div {justify-content: center !important;}</style>"
+                    f"<b>{final_width} x {final_height}</b>"
+                    "</td>"
+                    "</tr>"
+                )
                 PromptServer.instance.send_progress_text(message, unique_id)
             except:
                 pass
 
         return (outputs, final_width, final_height)
 
-NODE_CLASS_MAPPINGS = { 
+
+NODE_CLASS_MAPPINGS = {
     "ImageScaleToTotalPixelsX": ImageScaleToTotalPixelsX
 }
+
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageScaleToTotalPixelsX": "Scale Image to Total Pixels Adv"

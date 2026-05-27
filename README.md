@@ -5,7 +5,7 @@ A more advanced version of the [original node](https://github.com/comfyanonymous
 - Allows you to set the "multiple_of" for the width/height pair (e.g., use 16 for 16-channel VAEs)
 - Set "megapixels = 0" to disable megapixel scaling
 
-<img src="https://github.com/user-attachments/assets/db61279d-32c0-41f3-94c3-a6513454d8a7" width="400" />
+<img width="720" alt="image" src="https://github.com/user-attachments/assets/c5e7558d-9a19-4f20-bea7-c1bb33be878e" />
 
 ## 2) Install
 Navigate to the **ComfyUI/custom_nodes** folder and run the following command in your terminal:

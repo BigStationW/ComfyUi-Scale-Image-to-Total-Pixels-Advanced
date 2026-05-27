@@ -6,12 +6,10 @@ import math
 import comfy.utils
 import comfy.model_management
 import node_helpers
+import os
 
-try:
-    from server import PromptServer
-except ImportError:
-    PromptServer = None
-
+# Tells ComfyUI to look for JavaScript extensions in a folder named "js"
+WEB_DIRECTORY = "./js"
 
 class ImageScaleToTotalPixelsX:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
@@ -50,6 +48,9 @@ class ImageScaleToTotalPixelsX:
     RETURN_NAMES = ("image", "width", "height")
     FUNCTION = "upscale"
     CATEGORY = "image/upscaling"
+    
+    # THE MAGIC FIX: This forces ComfyUI to save the "ui" return data into the cache history!
+    OUTPUT_NODE = True 
 
     def upscale(
         self,
@@ -63,7 +64,6 @@ class ImageScaleToTotalPixelsX:
         height=None
     ):
         _, oh, ow, _ = image.shape
-
         manual_resolution = width is not None and height is not None
 
         if manual_resolution:
@@ -78,7 +78,6 @@ class ImageScaleToTotalPixelsX:
             target_width = round(ow * scale_by)
             target_height = round(oh * scale_by)
 
-        # multiple_of is always active, even when width and height are connected.
         if multiple_of > 1:
             target_width = target_width - (target_width % multiple_of)
             target_height = target_height - (target_height % multiple_of)
@@ -153,7 +152,6 @@ class ImageScaleToTotalPixelsX:
             if x > 0 or y > 0 or x2 > 0 or y2 > 0:
                 outputs = outputs[:, y:y2, x:x2, :]
 
-        # Final safety crop to enforce multiple_of after resize/crop/pad.
         if multiple_of > 1 and (
             outputs.shape[2] % multiple_of != 0 or
             outputs.shape[1] % multiple_of != 0
@@ -173,28 +171,21 @@ class ImageScaleToTotalPixelsX:
         final_width = outputs.shape[2]
         final_height = outputs.shape[1]
 
-        if unique_id and PromptServer is not None:
-            try:
-                message = (
-                    "<tr>"
-                    "<td colspan='2' style='text-align: center;'>"
-                    "<style>.dom-widget div {justify-content: center !important;}</style>"
-                    f"<b>{final_width} x {final_height}</b>"
-                    "</td>"
-                    "</tr>"
-                )
-                PromptServer.instance.send_progress_text(message, unique_id)
-            except:
-                pass
+        text_label = f"{final_width} x {final_height}"
 
-        return (outputs, final_width, final_height)
+        # Returns a dict with "ui". Because OUTPUT_NODE = True, ComfyUI natively broadcasts this!
+        return {
+            "ui": {"text": [text_label]}, 
+            "result": (outputs, final_width, final_height)
+        }
 
 
 NODE_CLASS_MAPPINGS = {
     "ImageScaleToTotalPixelsX": ImageScaleToTotalPixelsX
 }
 
-
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageScaleToTotalPixelsX": "Scale Image to Total Pixels Adv"
 }
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

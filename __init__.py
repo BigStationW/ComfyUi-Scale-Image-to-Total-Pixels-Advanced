@@ -21,7 +21,7 @@ class ImageScaleToTotalPixelsX:
             "required": {
                 "image": ("IMAGE",),
                 "megapixels": ("FLOAT", {
-                    "default": 1.0,
+                    "default": 1.05,
                     "min": 0.0,
                     "max": 16.0,
                     "step": 0.01
